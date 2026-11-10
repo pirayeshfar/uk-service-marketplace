@@ -2,5 +2,7 @@
   "name": "BritServe UK",
   "description": "Trusted UK B2C and B2B local services marketplace connecting customers with vetted professionals.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
