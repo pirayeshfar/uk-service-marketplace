@@ -11,5 +11,3 @@ A modern, full-featured service marketplace platform designed for the United Kin
 
 ## Deployment on Vercel
 This project is optimized for deployment on Vercel. Simply import your GitHub repository into Vercel, and it will automatically detect and configure the build settings.
-
-> Designed, Developed, and Instructed by: **Amir Saman Pirayeshfar**
