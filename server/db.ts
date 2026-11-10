@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   BookingRecord,
   PlatformSettings,
@@ -35,6 +36,18 @@ const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'data')
   : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'marketplace.json');
+
+let supabaseClient: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient | null {
+  if (supabaseClient) return supabaseClient;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (url && key) {
+    supabaseClient = createClient(url, key);
+    return supabaseClient;
+  }
+  return null;
+}
 
 export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -297,7 +310,47 @@ function createSeedDatabase(): DatabaseSchema {
   };
 }
 
-export function readDb(): DatabaseSchema {
+function migrateLegacyAdmin(db: DatabaseSchema): boolean {
+  const legacyAdmin = db.users.find(
+    (u) => u.id === 'usr_admin_1' && u.email === 'admin@britserve.co.uk'
+  );
+  if (legacyAdmin) {
+    legacyAdmin.username = 'pirayeshfar';
+    legacyAdmin.fullName = 'Site Administrator';
+    legacyAdmin.email = 'pirayeshfar@gmail.com';
+    legacyAdmin.recoveryEmail = 'pirayeshfar@gmail.com';
+    legacyAdmin.passwordHash = hashPassword('AmirSaman81');
+    return true;
+  }
+  return false;
+}
+
+export async function readDb(): Promise<DatabaseSchema> {
+  const supabase = getSupabase();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('marketplace_store')
+      .select('data')
+      .eq('id', 'main')
+      .maybeSingle();
+
+    if (!error && data?.data) {
+      const db = data.data as DatabaseSchema;
+      if (migrateLegacyAdmin(db)) {
+        await writeDb(db);
+      }
+      return db;
+    }
+
+    const seeded = createSeedDatabase();
+    await supabase.from('marketplace_store').upsert({
+      id: 'main',
+      data: seeded,
+      updated_at: new Date().toISOString(),
+    });
+    return seeded;
+  }
+
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
@@ -308,21 +361,26 @@ export function readDb(): DatabaseSchema {
   }
   const raw = fs.readFileSync(DB_FILE, 'utf-8');
   const db = JSON.parse(raw) as DatabaseSchema;
-  const legacyAdmin = db.users.find(
-    (u) => u.id === 'usr_admin_1' && u.email === 'admin@britserve.co.uk'
-  );
-  if (legacyAdmin) {
-    legacyAdmin.username = 'pirayeshfar';
-    legacyAdmin.fullName = 'Site Administrator';
-    legacyAdmin.email = 'pirayeshfar@gmail.com';
-    legacyAdmin.recoveryEmail = 'pirayeshfar@gmail.com';
-    legacyAdmin.passwordHash = hashPassword('AmirSaman81');
+  if (migrateLegacyAdmin(db)) {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   }
   return db;
 }
 
-export function writeDb(data: DatabaseSchema): void {
+export async function writeDb(data: DatabaseSchema): Promise<void> {
+  const supabase = getSupabase();
+  if (supabase) {
+    const { error } = await supabase.from('marketplace_store').upsert({
+      id: 'main',
+      data,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      throw new Error(`Supabase write failed: ${error.message}`);
+    }
+    return;
+  }
+
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }

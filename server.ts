@@ -46,7 +46,7 @@ interface AuthRequest extends Request {
   currentUser?: UserRecord;
 }
 
-function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Authentication required' });
@@ -58,7 +58,7 @@ function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
     res.status(401).json({ error: 'Invalid or expired session' });
     return;
   }
-  const db = readDb();
+  const db = await readDb();
   const user = db.users.find((u) => u.id === userId);
   if (!user) {
     res.status(401).json({ error: 'User not found' });
@@ -110,8 +110,8 @@ export function createApiApp() {
   app.use(express.json());
 
   // 1. Public Config (Brand Name, Tagline, Bank Card for payment simulation, UK Cities)
-  app.get('/api/config', (_req, res) => {
-    const db = readDb();
+  app.get('/api/config', async (_req, res) => {
+    const db = await readDb();
     res.json({
       settings: db.settings,
       ukCities: UK_CITIES,
@@ -119,8 +119,8 @@ export function createApiApp() {
   });
 
   // 2. Public Marketplace Discovery (Approved Providers + Dynamic Categories)
-  app.get('/api/marketplace', (req, res) => {
-    const db = readDb();
+  app.get('/api/marketplace', async (req, res) => {
+    const db = await readDb();
     const q = String(req.query.q || '').trim().toLowerCase();
     const category = String(req.query.category || '').trim().toLowerCase();
     const city = String(req.query.city || '').trim().toLowerCase();
@@ -166,13 +166,13 @@ export function createApiApp() {
   });
 
   // 3. Smart Auth Check (supports Email or Username)
-  app.post('/api/auth/check-email', (req, res) => {
+  app.post('/api/auth/check-email', async (req, res) => {
     const identifier = String(req.body?.email || '').trim().toLowerCase();
     if (!identifier) {
       res.status(400).json({ error: 'Please enter your email address or username.' });
       return;
     }
-    const db = readDb();
+    const db = await readDb();
     const existing = db.users.find(
       (u) =>
         u.email.toLowerCase() === identifier ||
@@ -194,10 +194,10 @@ export function createApiApp() {
   });
 
   // 4. Login (supports Email or Username)
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     const identifier = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
-    const db = readDb();
+    const db = await readDb();
     const user = db.users.find(
       (u) =>
         u.email.toLowerCase() === identifier ||
@@ -214,7 +214,7 @@ export function createApiApp() {
   });
 
   // 4b. Password Recovery using verified Recovery Email
-  app.post('/api/auth/forgot-password', (req, res) => {
+  app.post('/api/auth/forgot-password', async (req, res) => {
     const identifier = String(req.body?.identifier || '').trim().toLowerCase();
     const recoveryEmail = String(req.body?.recoveryEmail || '').trim().toLowerCase();
     const newPassword = String(req.body?.newPassword || '');
@@ -228,7 +228,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const user = db.users.find((u) => {
       const matchesIdentifier =
         !identifier ||
@@ -248,12 +248,12 @@ export function createApiApp() {
     }
 
     user.passwordHash = hashPassword(newPassword);
-    writeDb(db);
+    await writeDb(db);
     res.json({ message: 'Password has been reset successfully. You may now sign in.' });
   });
 
   // 5. Register (Customer or Service Provider with UK onboarding)
-  app.post('/api/auth/register', (req, res) => {
+  app.post('/api/auth/register', async (req, res) => {
     const body = req.body || {};
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
@@ -267,7 +267,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     if (db.users.some((u) => u.email.toLowerCase() === email)) {
       res.status(409).json({ error: 'An account with this email already exists.' });
       return;
@@ -329,7 +329,7 @@ export function createApiApp() {
     }
 
     db.users.push(newUser);
-    writeDb(db);
+    await writeDb(db);
 
     res.status(201).json({
       token: createToken(newUser.id),
@@ -338,8 +338,8 @@ export function createApiApp() {
   });
 
   // 6. Current User + Dashboard Data
-  app.get('/api/me', requireAuth, (req: AuthRequest, res) => {
-    const db = readDb();
+  app.get('/api/me', requireAuth, async (req: AuthRequest, res) => {
+    const db = await readDb();
     const user = req.currentUser!;
     const bookings = db.bookings
       .filter((b) =>
@@ -358,14 +358,14 @@ export function createApiApp() {
   });
 
   // 7. Provider Updates Services & Availability
-  app.put('/api/provider/profile', requireAuth, (req: AuthRequest, res) => {
+  app.put('/api/provider/profile', requireAuth, async (req: AuthRequest, res) => {
     const user = req.currentUser!;
     if (user.role !== 'provider' || !user.providerProfile) {
       res.status(403).json({ error: 'Only service providers can update provider profiles.' });
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const target = db.users.find((u) => u.id === user.id);
     if (!target || !target.providerProfile) {
       res.status(404).json({ error: 'Provider not found.' });
@@ -396,12 +396,12 @@ export function createApiApp() {
       target.providerProfile.accountNumber = p.accountNumber.trim();
     }
 
-    writeDb(db);
+    await writeDb(db);
     res.json({ user: sanitizeUser(target) });
   });
 
   // 8. Customer Creates Booking Request (Enters pending_pricing for Admin)
-  app.post('/api/bookings', requireAuth, (req: AuthRequest, res) => {
+  app.post('/api/bookings', requireAuth, async (req: AuthRequest, res) => {
     const customer = req.currentUser!;
     const {
       providerId,
@@ -420,7 +420,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const provider = db.users.find(
       (u) =>
         u.id === providerId &&
@@ -460,14 +460,14 @@ export function createApiApp() {
     };
 
     db.bookings.unshift(booking);
-    writeDb(db);
+    await writeDb(db);
 
     res.status(201).json({ booking });
   });
 
   // 9. Customer Simulates Bank Transfer Payment
-  app.post('/api/bookings/:id/pay', requireAuth, (req: AuthRequest, res) => {
-    const db = readDb();
+  app.post('/api/bookings/:id/pay', requireAuth, async (req: AuthRequest, res) => {
+    const db = await readDb();
     const booking = db.bookings.find((b) => b.id === req.params.id);
     if (!booking) {
       res.status(404).json({ error: 'Booking not found.' });
@@ -486,13 +486,13 @@ export function createApiApp() {
     booking.paidAt = new Date().toISOString();
     booking.paymentReference = `TXN-${booking.referenceCode}`;
 
-    writeDb(db);
+    await writeDb(db);
     res.json({ booking });
   });
 
   // 10. Provider or Admin Marks Paid Order Completed
-  app.post('/api/bookings/:id/complete', requireAuth, (req: AuthRequest, res) => {
-    const db = readDb();
+  app.post('/api/bookings/:id/complete', requireAuth, async (req: AuthRequest, res) => {
+    const db = await readDb();
     const booking = db.bookings.find((b) => b.id === req.params.id);
     if (!booking) {
       res.status(404).json({ error: 'Booking not found.' });
@@ -515,13 +515,13 @@ export function createApiApp() {
       provider.providerProfile.completedJobs += 1;
     }
 
-    writeDb(db);
+    await writeDb(db);
     res.json({ booking });
   });
 
   // 11. Admin Overview & Financial Ledger
-  app.get('/api/admin/overview', requireAdmin, (_req, res) => {
-    const db = readDb();
+  app.get('/api/admin/overview', requireAdmin, async (_req, res) => {
+    const db = await readDb();
     const bookings = [...db.bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     let totalOrderVolume = 0;
@@ -572,7 +572,7 @@ export function createApiApp() {
   });
 
   // 11b. Admin Creates a New User (Customer, Provider, or Admin)
-  app.post('/api/admin/users', requireAdmin, (req, res) => {
+  app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const body = req.body || {};
     const fullName = String(body.fullName || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
@@ -590,7 +590,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     if (
       db.users.some(
         (u) =>
@@ -638,19 +638,19 @@ export function createApiApp() {
     }
 
     db.users.push(newUser);
-    writeDb(db);
+    await writeDb(db);
     res.status(201).json({ user: sanitizeUser(newUser) });
   });
 
   // 11c. Admin Changes Password for Any User (Including Admin Self-Account)
-  app.put('/api/admin/users/:id/password', requireAdmin, (req, res) => {
+  app.put('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
     const newPassword = String(req.body?.newPassword || '');
     if (!newPassword || newPassword.length < 6) {
       res.status(400).json({ error: 'New password must be at least 6 characters.' });
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const target = db.users.find((u) => u.id === req.params.id);
     if (!target) {
       res.status(404).json({ error: 'User not found.' });
@@ -658,30 +658,30 @@ export function createApiApp() {
     }
 
     target.passwordHash = hashPassword(newPassword);
-    writeDb(db);
+    await writeDb(db);
     res.json({ message: `Password updated for ${target.username || target.fullName}.` });
   });
 
   // 12. Admin Review Provider (Approve / Reject)
-  app.post('/api/admin/providers/:id/review', requireAdmin, (req, res) => {
+  app.post('/api/admin/providers/:id/review', requireAdmin, async (req, res) => {
     const decision = req.body?.decision;
     if (decision !== 'approved' && decision !== 'rejected') {
       res.status(400).json({ error: 'Decision must be approved or rejected.' });
       return;
     }
-    const db = readDb();
+    const db = await readDb();
     const user = db.users.find((u) => u.id === req.params.id && u.role === 'provider');
     if (!user || !user.providerProfile) {
       res.status(404).json({ error: 'Provider not found.' });
       return;
     }
     user.providerProfile.approvalStatus = decision;
-    writeDb(db);
+    await writeDb(db);
     res.json({ user: sanitizeUser(user) });
   });
 
   // 13. Admin Sets Order Price & Commission Split
-  app.post('/api/admin/bookings/:id/price', requireAdmin, (req, res) => {
+  app.post('/api/admin/bookings/:id/price', requireAdmin, async (req, res) => {
     const totalPrice = Number(req.body?.totalPrice);
     const commissionRate = Number(req.body?.commissionRate ?? 15);
 
@@ -694,7 +694,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     const booking = db.bookings.find((b) => b.id === req.params.id);
     if (!booking) {
       res.status(404).json({ error: 'Booking not found.' });
@@ -710,12 +710,12 @@ export function createApiApp() {
     booking.providerPayout = providerPayout;
     booking.status = 'awaiting_payment';
 
-    writeDb(db);
+    await writeDb(db);
     res.json({ booking });
   });
 
   // 14. Admin Updates Brand Name & Tagline
-  app.put('/api/admin/settings/brand', requireAdmin, (req, res) => {
+  app.put('/api/admin/settings/brand', requireAdmin, async (req, res) => {
     const brandName = String(req.body?.brandName || '').trim();
     const tagline = String(req.body?.tagline || '').trim();
     const defaultCommissionRate = Number(req.body?.defaultCommissionRate);
@@ -725,18 +725,18 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     db.settings.brandName = brandName;
     if (tagline) db.settings.tagline = tagline;
     if (Number.isFinite(defaultCommissionRate) && defaultCommissionRate >= 0 && defaultCommissionRate <= 90) {
       db.settings.defaultCommissionRate = defaultCommissionRate;
     }
-    writeDb(db);
+    await writeDb(db);
     res.json({ settings: db.settings });
   });
 
   // 15. Admin Updates Bank Card Details
-  app.put('/api/admin/settings/bank-card', requireAdmin, (req, res) => {
+  app.put('/api/admin/settings/bank-card', requireAdmin, async (req, res) => {
     const body = req.body || {};
     const accountHolder = String(body.accountHolder || '').trim();
     const bankName = String(body.bankName || '').trim();
@@ -752,7 +752,7 @@ export function createApiApp() {
       return;
     }
 
-    const db = readDb();
+    const db = await readDb();
     db.settings.bankCard = {
       accountHolder,
       bankName,
@@ -762,7 +762,7 @@ export function createApiApp() {
       referencePrefix,
       updatedAt: new Date().toISOString(),
     };
-    writeDb(db);
+    await writeDb(db);
     res.json({ settings: db.settings });
   });
 
