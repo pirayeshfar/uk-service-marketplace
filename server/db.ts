@@ -31,7 +31,9 @@ export interface DatabaseSchema {
   bookings: BookingRecord[];
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'data')
+  : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'marketplace.json');
 
 export function hashPassword(password: string): string {

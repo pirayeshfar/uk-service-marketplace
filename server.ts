@@ -105,7 +105,7 @@ function computeDynamicCategories(providers: PublicProvider[]): CategorySummary[
     .sort((a, b) => b.providerCount - a.providerCount || a.name.localeCompare(b.name));
 }
 
-async function startServer() {
+export function createApiApp() {
   const app = express();
   app.use(express.json());
 
@@ -766,6 +766,12 @@ async function startServer() {
     res.json({ settings: db.settings });
   });
 
+  return app;
+}
+
+async function startServer() {
+  const app = createApiApp();
+
   // Vite middleware for development or static dist for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -786,4 +792,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
