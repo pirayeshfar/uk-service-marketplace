@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Calendar, CheckCircle2, MapPin, Star } from 'lucide-react';
 import type { PublicProvider } from '../types';
+import { AvatarVector } from './AvatarVector';
 
 interface ProviderCardProps {
   provider: PublicProvider;
@@ -8,34 +8,14 @@ interface ProviderCardProps {
 }
 
 export function ProviderCard({ provider, onBook }: ProviderCardProps) {
-  const [imgError, setImgError] = useState(false);
   const { providerProfile } = provider;
-
-  const initials = provider.fullName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <article className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between gap-5 hover:border-blue-300 transition-colors">
       <div className="space-y-4">
-        {/* Top Row: Avatar + Name + Verified */}
+        {/* Top Row: Vector Avatar + Name + Verified */}
         <div className="flex items-start gap-4">
-          {providerProfile.avatarUrl && !imgError ? (
-            <img
-              src={providerProfile.avatarUrl}
-              alt={provider.fullName}
-              referrerPolicy="no-referrer"
-              onError={() => setImgError(true)}
-              className="w-14 h-14 rounded-lg object-cover border border-slate-200 shrink-0"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-display font-bold text-slate-700 text-base shrink-0">
-              {initials}
-            </div>
-          )}
+          <AvatarVector gender={providerProfile.gender} />
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">

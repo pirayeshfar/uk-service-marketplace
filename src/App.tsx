@@ -13,8 +13,9 @@ import type {
   PublicProvider,
   PublicUser,
 } from './types';
+import heroImage from './assets/images/hero_uk_tradesperson_1794294740624.jpg';
 
-const HERO_IMAGE = '/src/assets/images/hero_uk_tradesperson_1794294740624.jpg';
+const HERO_IMAGE = heroImage;
 
 export default function App() {
   const [settings, setSettings] = useState<PlatformSettings>({

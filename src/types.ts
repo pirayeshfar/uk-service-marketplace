@@ -41,6 +41,7 @@ export interface ProviderProfile {
   approvalStatus: ApprovalStatus;
   rating: number;
   completedJobs: number;
+  gender?: 'male' | 'female';
   avatarUrl?: string;
 }
 

@@ -107,7 +107,7 @@ function createSeedDatabase(): DatabaseSchema {
         approvalStatus: 'approved',
         rating: 4.9,
         completedJobs: 64,
-        avatarUrl: '/src/assets/images/avatar_provider_2_1794294739796.jpg',
+        gender: 'male',
       },
     },
     {
@@ -134,7 +134,7 @@ function createSeedDatabase(): DatabaseSchema {
         approvalStatus: 'approved',
         rating: 4.95,
         completedJobs: 112,
-        avatarUrl: '/src/assets/images/avatar_provider_1_1794294739995.jpg',
+        gender: 'female',
       },
     },
     {
@@ -161,7 +161,7 @@ function createSeedDatabase(): DatabaseSchema {
         approvalStatus: 'approved',
         rating: 4.88,
         completedJobs: 49,
-        avatarUrl: '/src/assets/images/avatar_provider_3_1794294740765.jpg',
+        gender: 'female',
       },
     },
     {
@@ -332,27 +332,33 @@ function migrateLegacyAdmin(db: DatabaseSchema): boolean {
 export async function readDb(): Promise<DatabaseSchema> {
   const supabase = getSupabase();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('marketplace_store')
-      .select('data')
-      .eq('id', 'main')
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('marketplace_store')
+        .select('data')
+        .eq('id', 'main')
+        .maybeSingle();
 
-    if (!error && data?.data) {
-      const db = data.data as DatabaseSchema;
-      if (migrateLegacyAdmin(db)) {
-        await writeDb(db);
+      if (!error && data?.data) {
+        const db = data.data as DatabaseSchema;
+        if (migrateLegacyAdmin(db)) {
+          await writeDb(db);
+        }
+        return db;
       }
-      return db;
-    }
 
-    const seeded = createSeedDatabase();
-    await supabase.from('marketplace_store').upsert({
-      id: 'main',
-      data: seeded,
-      updated_at: new Date().toISOString(),
-    });
-    return seeded;
+      if (!error) {
+        const seeded = createSeedDatabase();
+        await supabase.from('marketplace_store').upsert({
+          id: 'main',
+          data: seeded,
+          updated_at: new Date().toISOString(),
+        });
+        return seeded;
+      }
+    } catch {
+      // Fall back to local/tmp file store if Supabase is unreachable
+    }
   }
 
   if (!fs.existsSync(DATA_DIR)) {
